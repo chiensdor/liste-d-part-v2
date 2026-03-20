@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0;">
+<canvas id="c" width="1920" height="1080"></canvas>
+
+<script>
+const bleu = "#005bbb";
+const blanc = "#ffffff";
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+// Fond bleu
+ctx.fillStyle = bleu;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Texte
+ctx.fillStyle = blanc;
+ctx.font = "bold 100px Arial";
+ctx.textAlign = "center";
+ctx.fillText("FFSLC – Listes de départ", 960, 600);
+
+// Logo rond
+ctx.beginPath();
+ctx.arc(960, 350, 130, 0, Math.PI * 2);
+ctx.fillStyle = blanc;
+ctx.fill();
+
+ctx.fillStyle = bleu;
+ctx.font = "bold 90px Arial";
+ctx.fillText("🐾", 960, 390);
+</script>
+</body>
+</html>
