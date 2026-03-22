@@ -453,8 +453,9 @@ function afficherTableau() {
         filteredView.length + " inscrits fusionnés";
 }
 </script>
-
-<!-- PARTIE 3 — GENERATION + EXPORTS + PDF -->
+<!-- ============================
+     PARTIE 3 — GENERATION + EXPORTS + PDF
+============================= -->
 <script>
 /* ============================================================
    TRI DES COLONNES
@@ -612,7 +613,7 @@ document.getElementById("btnExportExcelMulti").addEventListener("click", () => {
 });
 
 /* ============================================================
-   EXPORT TOUT (CSV + Excel)
+   EXPORT TOUT
 ============================================================ */
 document.getElementById("btnExporterTout").addEventListener("click", () => {
     if (!listesFinales || Object.keys(listesFinales).length === 0) {
@@ -739,7 +740,7 @@ document.getElementById("btnExportPDFGlobal").addEventListener("click", () => {
         const data = listesFinales[d];
 
         html += `
-        <div class="${index > 0 ? 'page-break' : ''}">
+        <div class="${index > 0 ? "page-break" : ""}">
             <h2>${d.replaceAll("_", " ").toUpperCase()}</h2>
             <table><thead><tr>
                 <th>Dossard</th><th>Licence</th><th>Nom</th><th>Prénom</th>
