@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FFSLC – Listes de départ</title>
 
+<!-- PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#005bbb">
 
@@ -94,6 +95,7 @@ th { background:#e8edf5; cursor:pointer; }
         <tbody></tbody>
     </table>
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -105,11 +107,13 @@ let filteredView = [];
 let listesFinales = {};
 window.paramDepart = {};
 
+/* Nettoyage licence */
 function cleanLicence(v) {
     if (!v) return "";
     return String(v).toUpperCase().replace(/\s+/g, "").replace(/[^A-Z0-9]/g, "");
 }
 
+/* Récupération flexible de colonnes */
 function getCol(ligne, noms) {
     for (let n of noms) {
         if (ligne[n] !== undefined && ligne[n] !== null) return ligne[n];
@@ -117,6 +121,7 @@ function getCol(ligne, noms) {
     return "";
 }
 
+/* Normalisation des disciplines */
 function normaliserDiscipline(d) {
     if (!d) return "";
     d = d.toLowerCase().replace(/\s+/g, "");
@@ -125,6 +130,15 @@ function normaliserDiscipline(d) {
     const isDimanche = d.includes("dimanche");
     const suffix = isSamedi ? "_samedi" : isDimanche ? "_dimanche" : "";
 
+    // 🔵 JEUNES & RELAIS (à détecter AVANT le reste)
+    if (d.includes("canicrossbenjamin")) return "canicross_benjamin" + suffix;
+    if (d.includes("canicrossminime")) return "canicross_minime" + suffix;
+    if (d.includes("canicrosscadet")) return "canicross_cadet" + suffix;
+    if (d.includes("canivttcadet")) return "canivtt_cadet" + suffix;
+    if (d.includes("canicrossbaby")) return "canicross_baby" + suffix;
+    if (d.includes("relais")) return "canicross_relais" + suffix;
+
+    // 🔵 DISCIPLINES PRINCIPALES
     if (d.includes("canicrosscourt")) return "canicross_court" + suffix;
     if (d.includes("canicrosslong")) return "canicross_long" + suffix;
     if (d.includes("canicross")) return "canicross" + suffix;
@@ -142,7 +156,9 @@ function normaliserDiscipline(d) {
     return "";
 }
 
-/* IMPORT INSCRITS */
+/* ============================================================
+   🔵 IMPORT INSCRITS
+============================================================ */
 document.getElementById("fichierInscrits").addEventListener("change", () => {
     lireFichier(document.getElementById("fichierInscrits"), data => {
 
@@ -163,6 +179,7 @@ document.getElementById("fichierInscrits").addEventListener("change", () => {
     });
 });
 
+/* Lecture CSV / Excel */
 function lireFichier(input, callback) {
     const fichier = input.files[0];
     if (!fichier) return;
@@ -186,7 +203,9 @@ function lireFichier(input, callback) {
     }
 }
 
-/* IMPORT MOYENNES */
+/* ============================================================
+   🔵 IMPORT MOYENNES
+============================================================ */
 fetch("https://raw.githubusercontent.com/chiensdor/liste-de-d-part/main/resultats_moyennes.csv")
     .then(res => res.text())
     .then(csv => {
@@ -199,13 +218,15 @@ fetch("https://raw.githubusercontent.com/chiensdor/liste-de-d-part/main/resultat
                     moyenne: getCol(l, ["moyenne"]),
                     courses: getCol(l, ["nombre_courses"]),
                     participants: "",
-                    discipline: "" // ton fichier n’a pas cette colonne
+                    discipline: ""
                 }));
             }
         });
     });
 
-/* FUSION */
+/* ============================================================
+   🔵 FUSION INSCRITS + MOYENNES
+============================================================ */
 function fusionner() {
 
     resultatsGlobaux = inscrits.map(i => {
@@ -230,13 +251,16 @@ function fusionner() {
 
     disciplines.forEach(d => {
         if (!d) return;
+
         const id = d.replace(/[^a-z0-9]/gi, "_");
 
         zone.innerHTML += `
             <div class="card" style="background:#eef5ff;">
                 <h3>${d.replaceAll("_", " ").toUpperCase()}</h3>
+
                 <label>Heure de départ :</label>
                 <input type="time" id="heure_${id}" value="09:00">
+
                 <label>Mode de départ :</label>
                 <select id="mode_${id}">
                     <option value="1">Individuel</option>
@@ -247,75 +271,33 @@ function fusionner() {
                     <option value="40">Vagues de 40</option>
                     <option value="30s">Individuel 30s</option>
                 </select>
+
+                <label>Dossard de départ :</label>
+                <input type="number" id="dossard_${id}" value="1" min="1">
             </div>
         `;
 
-        paramDepart[d] = { heure: "09:00", mode: "1" };
+        paramDepart[d] = {
+            heure: "09:00",
+            mode: "1",
+            dossard: 1
+        };
     });
 
     alert("Fusion terminée !");
 }
 
-/* AFFICHAGE TABLEAU */
-function afficherTableau() {
-    const tbody = document.querySelector("#tableResultat tbody");
-    tbody.innerHTML = "";
-
-    filteredView.forEach(l => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${l.licence}</td>
-                <td>${l.nom}</td>
-                <td>${l.prenom}</td>
-                <td>${l.categorie}</td>
-                <td>${l.club}</td>
-                <td>${l.chien}</td>
-                <td>${l.race}</td>
-                <td>${l.puce}</td>
-                <td>${l.dossard || ""}</td>
-                <td>${l.moyenne}</td>
-                <td>${l.discipline}</td>
-                <td>${l.heure_depart || ""}</td>
-            </tr>
-        `;
-    });
-
-    document.getElementById("chipStats").textContent =
-        filteredView.length + " inscrits fusionnés";
-}
-
-/* TRI */
-let triColonne = null;
-let triAsc = true;
-
-document.querySelectorAll("#tableResultat th").forEach((th, index) => {
-    th.addEventListener("click", () => {
-        const cle = [
-            "licence","nom","prenom","categorie","club","chien","race","puce",
-            "dossard","moyenne","discipline","heure_depart"
-        ][index];
-
-        if (triColonne === cle) triAsc = !triAsc;
-        else { triColonne = cle; triAsc = true; }
-
-        filteredView.sort((a, b) => {
-            let va = a[cle] || "";
-            let vb = b[cle] || "";
-            if (!isNaN(va) && !isNaN(vb)) { va = Number(va); vb = Number(vb); }
-            return triAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
-        });
-
-        afficherTableau();
-    });
-});
-
-/* GÉNÉRATION DES DÉPARTS */
+/* ============================================================
+   🔵 GÉNÉRATION DES DÉPARTS
+============================================================ */
 function trierParMoyenne(liste) {
     return liste.sort((a, b) => {
         const ma = Number(a.moyenne) || 0;
         const mb = Number(b.moyenne) || 0;
+
         if (ma === 0 && mb !== 0) return 1;
         if (mb === 0 && ma !== 0) return -1;
+
         return ma - mb;
     });
 }
@@ -356,29 +338,110 @@ function genererIndividuel30s(liste, heure) {
 }
 
 document.getElementById("btnGenererListes").addEventListener("click", () => {
+
     listesFinales = {};
 
     for (let d in paramDepart) {
+
         const id = d.replace(/[^a-z0-9]/gi, "_");
+
         const heure = document.getElementById("heure_" + id).value;
         const mode = document.getElementById("mode_" + id).value;
+        const dossardDepart = Number(document.getElementById("dossard_" + id).value) || 1;
 
         const liste = resultatsGlobaux.filter(r => r.discipline === d);
+
         trierParMoyenne(liste);
 
-        if (mode === "30s") listesFinales[d] = genererIndividuel30s(liste, heure);
-        else if (mode == 20 || mode == 40) listesFinales[d] = genererVagues(liste, heure, Number(mode));
-        else listesFinales[d] = genererGroupes(liste, heure, Number(mode), 30);
+        if (mode === "30s") {
+            listesFinales[d] = genererIndividuel30s(liste, heure);
+        }
+        else if (mode == 20 || mode == 40) {
+            listesFinales[d] = genererVagues(liste, heure, Number(mode));
+        }
+        else {
+            listesFinales[d] = genererGroupes(liste, heure, Number(mode), 30);
+        }
+
+        listesFinales[d] = listesFinales[d].map((item, index) => ({
+            ...item,
+            dossard: dossardDepart + index
+        }));
     }
 
     resultatsGlobaux = Object.values(listesFinales).flat();
     filteredView = [...resultatsGlobaux];
+
     afficherTableau();
 
     alert("Listes générées !");
 });
+
 /* ============================================================
-   🔵 EXPORTS
+   🔵 AFFICHAGE DU TABLEAU
+============================================================ */
+function afficherTableau() {
+    const tbody = document.querySelector("#tableResultat tbody");
+    tbody.innerHTML = "";
+
+    filteredView.forEach(l => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${l.licence}</td>
+                <td>${l.nom}</td>
+                <td>${l.prenom}</td>
+                <td>${l.categorie}</td>
+                <td>${l.club}</td>
+                <td>${l.chien}</td>
+                <td>${l.race}</td>
+                <td>${l.puce}</td>
+                <td>${l.dossard || ""}</td>
+                <td>${l.moyenne}</td>
+                <td>${l.discipline}</td>
+                <td>${l.heure_depart || ""}</td>
+            </tr>
+        `;
+    });
+
+    document.getElementById("chipStats").textContent =
+        filteredView.length + " inscrits fusionnés";
+}
+
+/* ============================================================
+   🔵 TRI DES COLONNES
+============================================================ */
+let triColonne = null;
+let triAsc = true;
+
+document.querySelectorAll("#tableResultat th").forEach((th, index) => {
+    th.addEventListener("click", () => {
+
+        const cle = [
+            "licence","nom","prenom","categorie","club","chien","race","puce",
+            "dossard","moyenne","discipline","heure_depart"
+        ][index];
+
+        if (triColonne === cle) triAsc = !triAsc;
+        else { triColonne = cle; triAsc = true; }
+
+        filteredView.sort((a, b) => {
+            let va = a[cle] || "";
+            let vb = b[cle] || "";
+
+            if (!isNaN(va) && !isNaN(vb)) {
+                va = Number(va);
+                vb = Number(vb);
+            }
+
+            return triAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+        });
+
+        afficherTableau();
+    });
+});
+
+/* ============================================================
+   🔵 EXPORT CSV
 ============================================================ */
 function exporterCSV(data, nom) {
     const csv = Papa.unparse(data);
@@ -391,6 +454,9 @@ function exporterCSV(data, nom) {
     URL.revokeObjectURL(url);
 }
 
+/* ============================================================
+   🔵 EXPORT EXCEL
+============================================================ */
 function exporterExcel(data, nom) {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -398,6 +464,9 @@ function exporterExcel(data, nom) {
     XLSX.writeFile(wb, nom);
 }
 
+/* ============================================================
+   🔵 EXPORT EXCEL MULTI-ONGLETS
+============================================================ */
 document.getElementById("btnExportExcelMulti").addEventListener("click", () => {
     if (!listesFinales || Object.keys(listesFinales).length === 0) {
         alert("Génère d’abord les listes de départ.");
@@ -405,97 +474,32 @@ document.getElementById("btnExportExcelMulti").addEventListener("click", () => {
     }
 
     const wb = XLSX.utils.book_new();
+
     for (let d in listesFinales) {
         const ws = XLSX.utils.json_to_sheet(listesFinales[d]);
         XLSX.utils.book_append_sheet(wb, ws, d.substring(0, 31));
     }
+
     XLSX.writeFile(wb, "depart_multi_onglets.xlsx");
 });
 
+/* ============================================================
+   🔵 EXPORTER TOUT (CSV + Excel)
+============================================================ */
 document.getElementById("btnExporterTout").addEventListener("click", () => {
     if (!listesFinales || Object.keys(listesFinales).length === 0) {
         alert("Génère d’abord les listes de départ.");
         return;
     }
+
     for (let d in listesFinales) {
         exporterCSV(listesFinales[d], `depart_${d}.csv`);
         exporterExcel(listesFinales[d], `depart_${d}.xlsx`);
     }
+
     exporterExcel(resultatsGlobaux, "depart_global.xlsx");
+
     alert("Tous les fichiers ont été exportés.");
-});
-
-/* ============================================================
-   🔵 PDF PAR DISCIPLINE
-============================================================ */
-document.getElementById("btnExportPDFParDiscipline").addEventListener("click", () => {
-    if (!listesFinales || Object.keys(listesFinales).length === 0) {
-        alert("Génère d’abord les listes de départ.");
-        return;
-    }
-
-    const disciplines = Object.keys(listesFinales);
-    let index = 0;
-
-    function imprimerDiscipline() {
-        if (index >= disciplines.length) {
-            alert("Export PDF terminé.");
-            return;
-        }
-
-        const d = disciplines[index];
-        const data = listesFinales[d];
-        const w = window.open("", "_blank");
-
-        let html = `
-        <html><head><title>${d}</title>
-        <style>
-            body { font-family: Arial; padding: 20px; }
-            h1 { text-align: center; margin-bottom: 20px; color:#003f7f; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { border: 1px solid #000; padding: 6px; font-size: 12px; }
-        </style></head><body>
-        <h1>${d.replaceAll("_", " ").toUpperCase()}</h1>
-        <table><thead><tr>
-            <th>Dossard</th><th>Licence</th><th>Nom</th><th>Prénom</th>
-            <th>Catégorie</th><th>Club</th><th>Chien</th><th>Race</th>
-            <th>Puce</th><th>Heure départ</th>
-        </tr></thead><tbody>`;
-
-        data.forEach(l => {
-            html += `
-            <tr>
-                <td>${l.dossard || ""}</td>
-                <td>${l.licence}</td>
-                <td>${l.nom}</td>
-                <td>${l.prenom}</td>
-                <td>${l.categorie}</td>
-                <td>${l.club}</td>
-                <td>${l.chien}</td>
-                <td>${l.race}</td>
-                <td>${l.puce}</td>
-                <td>${l.heure_depart || ""}</td>
-            </tr>`;
-        });
-
-        html += `</tbody></table></body></html>`;
-
-        w.document.write(html);
-        w.document.close();
-
-        w.onload = () => {
-            w.print();
-            const timer = setInterval(() => {
-                if (w.closed) {
-                    clearInterval(timer);
-                    index++;
-                    imprimerDiscipline();
-                }
-            }, 300);
-        };
-    }
-
-    imprimerDiscipline();
 });
 
 /* ============================================================
@@ -559,9 +563,8 @@ document.getElementById("btnExportPDFGlobal").addEventListener("click", () => {
     w.document.close();
     w.onload = () => w.print();
 });
-
 /* ============================================================
-   🔵 RESET
+   🔵 RESET COMPLET
 ============================================================ */
 document.getElementById("btnReset").addEventListener("click", () => {
     inscrits = [];
@@ -578,11 +581,13 @@ document.getElementById("btnReset").addEventListener("click", () => {
 });
 
 /* ============================================================
-   🔵 SERVICE WORKER
+   🔵 SERVICE WORKER (PWA)
 ============================================================ */
 if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-        navigator.serviceWorker.register("service-worker.js");
+        navigator.serviceWorker.register("service-worker.js")
+            .then(() => console.log("Service Worker enregistré"))
+            .catch(err => console.error("Erreur SW :", err));
     });
 }
 </script>
