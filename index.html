@@ -5,13 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FFSLC – Listes de départ</title>
 
-<!-- PWA -->
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#005bbb">
-
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-<link rel="apple-touch-startup-image" href="splash/splash-portrait.png" media="(orientation: portrait)">
-<link rel="apple-touch-startup-image" href="splash/splash-landscape.png" media="(orientation: landscape)">
 
 <style>
 :root {
@@ -66,7 +61,6 @@ th { background:#e8edf5; cursor:pointer; }
 <div class="card">
     <h2>Actions</h2>
     <button id="btnGenererListes" class="success">Générer les listes</button>
-    <button id="btnExportPDFParDiscipline" class="primary"></button>
     <button id="btnExportPDFGlobal" class="primary">PDF global</button>
     <button id="btnExportExcelMulti" class="primary">Excel multi‑onglets</button>
     <button id="btnExporterTout" class="success">Exporter tout</button>
@@ -95,17 +89,24 @@ th { background:#e8edf5; cursor:pointer; }
         <tbody></tbody>
     </table>
 </div>
-
+<!-- Librairies -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
+/* ============================================================
+   🔵 VARIABLES GLOBALES
+============================================================ */
 let inscrits = [];
 let resultats = [];
 let resultatsGlobaux = [];
 let filteredView = [];
 let listesFinales = {};
 window.paramDepart = {};
+
+/* ============================================================
+   🔵 OUTILS DE NETTOYAGE
+============================================================ */
 
 /* Nettoyage licence */
 function cleanLicence(v) {
@@ -130,7 +131,6 @@ function normaliserDiscipline(d) {
     const isDimanche = d.includes("dimanche");
     const suffix = isSamedi ? "_samedi" : isDimanche ? "_dimanche" : "";
 
-    // 🔵 JEUNES & RELAIS (à détecter AVANT le reste)
     if (d.includes("canicrossbenjamin")) return "canicross_benjamin" + suffix;
     if (d.includes("canicrossminime")) return "canicross_minime" + suffix;
     if (d.includes("canicrosscadet")) return "canicross_cadet" + suffix;
@@ -138,7 +138,6 @@ function normaliserDiscipline(d) {
     if (d.includes("canicrossbaby")) return "canicross_baby" + suffix;
     if (d.includes("relais")) return "canicross_relais" + suffix;
 
-    // 🔵 DISCIPLINES PRINCIPALES
     if (d.includes("canicrosscourt")) return "canicross_court" + suffix;
     if (d.includes("canicrosslong")) return "canicross_long" + suffix;
     if (d.includes("canicross")) return "canicross" + suffix;
@@ -157,7 +156,7 @@ function normaliserDiscipline(d) {
 }
 
 /* ============================================================
-   🔵 IMPORT INSCRITS
+   🔵 IMPORT INSCRITS (CSV ou Excel)
 ============================================================ */
 document.getElementById("fichierInscrits").addEventListener("change", () => {
     lireFichier(document.getElementById("fichierInscrits"), data => {
@@ -204,7 +203,7 @@ function lireFichier(input, callback) {
 }
 
 /* ============================================================
-   🔵 IMPORT MOYENNES
+   🔵 IMPORT MOYENNES (depuis GitHub)
 ============================================================ */
 fetch("https://raw.githubusercontent.com/chiensdor/liste-de-d-part/main/resultats_moyennes.csv")
     .then(res => res.text())
@@ -213,24 +212,85 @@ fetch("https://raw.githubusercontent.com/chiensdor/liste-de-d-part/main/resultat
             header: true,
             skipEmptyLines: true,
             complete: data => {
-                resultats = data.data.map(l => ({
-                    licence: cleanLicence(getCol(l, ["licence"])),
-                    moyenne: getCol(l, ["moyenne"]),
-                    courses: getCol(l, ["nombre_courses"]),
-                    participants: "",
-                    discipline: ""
+
+                resultats = data.data.map(x => ({
+                    licence: (x["Licence"] || "").trim().toUpperCase(),
+                    nom: (x["Nom"] || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(),
+                    prenom: (x["Prénom"] || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(),
+                    categorie: (x["Catégorie"] || "").trim().toLowerCase(),
+                    club: (x["Club"] || "").trim(),
+                    chien: (x["Nom du chien"] || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(),
+                    race: (x["Race"] || "").trim(),
+                    puce: (x["Puce"] || "").replace(/\D/g, ""),
+                    moyenne: x["Moyenne"] || "",
+                    courses: x["Courses"] || ""
                 }));
+
+                console.log("Moyennes importées :", resultats.length);
             }
         });
     });
-
+</script>
+<script>
 /* ============================================================
-   🔵 FUSION INSCRITS + MOYENNES
+   🔵 FUSION INSCRITS + MOYENNES (VERSION ROBUSTE)
 ============================================================ */
 function fusionner() {
 
+    /* ------------------------------------------------------------
+       1) Normalisation des données MOYENNES
+       ------------------------------------------------------------ */
+    resultats = resultats.map(x => ({
+        licence: (x.licence || "").trim().toUpperCase(),
+
+        nom: (x.nom || "")
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .trim().toLowerCase(),
+
+        prenom: (x.prenom || "")
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .trim().toLowerCase(),
+
+        categorie: (x.categorie || "").trim().toLowerCase(),
+
+        club: (x.club || "").trim(),
+
+        chien: (x.chien || "")
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .trim().toLowerCase(),
+
+        race: (x.race || "").trim(),
+
+        // Excel casse les puces → on garde uniquement les chiffres
+        puce: (x.puce || "").replace(/\D/g, ""),
+
+        moyenne: x.moyenne || "",
+        courses: x.courses || ""
+    }));
+
+
+    /* ------------------------------------------------------------
+       2) Fusion avec les INSCRITS
+       ------------------------------------------------------------ */
     resultatsGlobaux = inscrits.map(i => {
-        const r = resultats.find(x => x.licence === i.licence);
+
+        const prenomInscrit = (i.prenom || "")
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .trim().toLowerCase();
+
+        const chienInscrit = (i.chien || "")
+            .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+            .trim().toLowerCase();
+
+        const puceInscrit = (i.puce || "").replace(/\D/g, "");
+
+        // 🔵 Fusion basée sur : licence + prénom + chien
+        const r = resultats.find(x =>
+            x.licence === i.licence &&
+            x.prenom === prenomInscrit &&
+            x.chien === chienInscrit
+        );
+
         return {
             ...i,
             moyenne: r ? r.moyenne : "",
@@ -240,8 +300,24 @@ function fusionner() {
         };
     });
 
+
+    /* ------------------------------------------------------------
+       3) Nettoyage final
+       ------------------------------------------------------------ */
+    resultatsGlobaux = resultatsGlobaux.filter(x => x && x.licence);
+
     filteredView = [...resultatsGlobaux];
+
     afficherTableau();
+    genererParametresParDiscipline();
+
+    alert("Fusion terminée !");
+}
+
+/* ============================================================
+   🔵 GÉNÉRATION DES PARAMÈTRES PAR DISCIPLINE
+============================================================ */
+function genererParametresParDiscipline() {
 
     const disciplines = [...new Set(resultatsGlobaux.map(r => r.discipline))];
 
@@ -283,18 +359,18 @@ function fusionner() {
             dossard: 1
         };
     });
-
-    alert("Fusion terminée !");
 }
-
+</script>
+<script>
 /* ============================================================
-   🔵 GÉNÉRATION DES DÉPARTS
+   🔵 TRI PAR MOYENNE
 ============================================================ */
 function trierParMoyenne(liste) {
     return liste.sort((a, b) => {
         const ma = Number(a.moyenne) || 0;
         const mb = Number(b.moyenne) || 0;
 
+        // Ceux sans moyenne passent en bas
         if (ma === 0 && mb !== 0) return 1;
         if (mb === 0 && ma !== 0) return -1;
 
@@ -302,6 +378,9 @@ function trierParMoyenne(liste) {
     });
 }
 
+/* ============================================================
+   🔵 DÉPARTS PAR GROUPES (1, 2, 3, 4)
+============================================================ */
 function genererGroupes(liste, heure, taille, intervalle) {
     let [h, m] = heure.split(":").map(Number);
     let base = new Date();
@@ -314,6 +393,9 @@ function genererGroupes(liste, heure, taille, intervalle) {
     });
 }
 
+/* ============================================================
+   🔵 DÉPARTS EN VAGUES (20, 40)
+============================================================ */
 function genererVagues(liste, heure, taille) {
     let [h, m] = heure.split(":").map(Number);
     let base = new Date();
@@ -321,22 +403,28 @@ function genererVagues(liste, heure, taille) {
 
     return liste.map((item, i) => {
         let g = Math.floor(i / taille);
-        let d = new Date(base.getTime() + g * 60000);
+        let d = new Date(base.getTime() + g * 60000); // 1 minute par vague
         return { ...item, heure_depart: d.toTimeString().split(" ")[0] };
     });
 }
 
+/* ============================================================
+   🔵 DÉPART INDIVIDUEL 30 SECONDES
+============================================================ */
 function genererIndividuel30s(liste, heure) {
     let [h, m] = heure.split(":").map(Number);
     let base = new Date();
     base.setHours(h, m, 0, 0);
 
     return liste.map((item, i) => {
-        let d = new Date(base.getTime() + i * 30000);
+        let d = new Date(base.getTime() + i * 30000); // 30 secondes
         return { ...item, heure_depart: d.toTimeString().split(" ")[0] };
     });
 }
 
+/* ============================================================
+   🔵 GÉNÉRATION DES LISTES DE DÉPART
+============================================================ */
 document.getElementById("btnGenererListes").addEventListener("click", () => {
 
     listesFinales = {};
@@ -351,8 +439,10 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
 
         const liste = resultatsGlobaux.filter(r => r.discipline === d);
 
+        // 🔵 Tri par moyenne AVANT génération
         trierParMoyenne(liste);
 
+        // 🔵 Sélection du mode de départ
         if (mode === "30s") {
             listesFinales[d] = genererIndividuel30s(liste, heure);
         }
@@ -363,12 +453,14 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
             listesFinales[d] = genererGroupes(liste, heure, Number(mode), 30);
         }
 
+        // 🔵 Attribution des dossards
         listesFinales[d] = listesFinales[d].map((item, index) => ({
             ...item,
             dossard: dossardDepart + index
         }));
     }
 
+    // Fusion finale pour affichage
     resultatsGlobaux = Object.values(listesFinales).flat();
     filteredView = [...resultatsGlobaux];
 
@@ -376,7 +468,8 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
 
     alert("Listes générées !");
 });
-
+</script>
+<script>
 /* ============================================================
    🔵 AFFICHAGE DU TABLEAU
 ============================================================ */
@@ -428,6 +521,7 @@ document.querySelectorAll("#tableResultat th").forEach((th, index) => {
             let va = a[cle] || "";
             let vb = b[cle] || "";
 
+            // Tri numérique si possible
             if (!isNaN(va) && !isNaN(vb)) {
                 va = Number(va);
                 vb = Number(vb);
@@ -439,7 +533,8 @@ document.querySelectorAll("#tableResultat th").forEach((th, index) => {
         afficherTableau();
     });
 });
-
+</script>
+<script>
 /* ============================================================
    🔵 EXPORT CSV
 ============================================================ */
@@ -455,7 +550,7 @@ function exporterCSV(data, nom) {
 }
 
 /* ============================================================
-   🔵 EXPORT EXCEL
+   🔵 EXPORT EXCEL (1 onglet)
 ============================================================ */
 function exporterExcel(data, nom) {
     const ws = XLSX.utils.json_to_sheet(data);
@@ -563,18 +658,25 @@ document.getElementById("btnExportPDFGlobal").addEventListener("click", () => {
     w.document.close();
     w.onload = () => w.print();
 });
+</script>
+<script>
 /* ============================================================
    🔵 RESET COMPLET
 ============================================================ */
 document.getElementById("btnReset").addEventListener("click", () => {
+
     inscrits = [];
     resultats = [];
     resultatsGlobaux = [];
     filteredView = [];
     listesFinales = {};
+    window.paramDepart = {};
 
+    // Nettoyage du tableau
     document.querySelector("#tableResultat tbody").innerHTML = "";
     document.getElementById("chipStats").textContent = "0 inscrits fusionnés";
+
+    // Nettoyage des paramètres par discipline
     document.getElementById("zoneParametres").innerHTML = "";
 
     alert("Application réinitialisée.");
@@ -592,6 +694,6 @@ if ("serviceWorker" in navigator) {
 }
 </script>
 
-</div>
+</div> <!-- fermeture .container -->
 </body>
 </html>
