@@ -48,7 +48,7 @@ th { background:#e8edf5; cursor:pointer; }
 
 <header>
     FFSLC – Générateur de listes de départ
-    <div>Créé par Robert AURAY</div>
+    <div>Créé par Robert AURAY Copyright © version 3.00</div>
 </header>
 
 <div class="container">
@@ -195,6 +195,7 @@ function normaliserDiscipline(d) {
     if (d.includes("canicrossbaby")) return "canicross_baby" + suffix;
     if (d.includes("relais")) return "canicross_relais" + suffix;
 
+    if (d.includes("canicrossdécouverte")) return "canicross_découverte" + suffix;
     if (d.includes("canicrosscourt")) return "canicross_court" + suffix;
     if (d.includes("canicrosslong")) return "canicross_long" + suffix;
     if (d.includes("canicross")) return "canicross" + suffix;
@@ -208,6 +209,8 @@ function normaliserDiscipline(d) {
     if (d.includes("pedi") || d.includes("cycle")) return "canipedicycle" + suffix;
 
     if (d.includes("trail")) return "canitrail" + suffix;
+    if (d.includes("canimarche")) return "Canimarche_non_chronométrée" + suffix;
+    if (d.includes("canirandonnée")) return "Canirandonnée_non_chronométrée" + suffix;
 
     return "";
 }
