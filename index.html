@@ -113,7 +113,6 @@ window.paramDepart = {};
 /* ============================================================
    🔵 OUTILS DE NETTOYAGE
 ============================================================ */
-
 function cleanLicence(v) {
     if (!v) return "";
     return String(v).toUpperCase().replace(/\s+/g, "").replace(/[^A-Z0-9]/g, "");
@@ -130,6 +129,8 @@ function getCol(ligne, noms) {
    🔵 NORMALISATION DES COLONNES EXCEL
 ============================================================ */
 function normaliserColonnesExcel(obj) {
+    console.log("Colonnes détectées :", Object.keys(obj));
+
     const mapping = {
         "Licence": "licence",
         "Nom de famille": "nom",
@@ -222,7 +223,7 @@ document.getElementById("fichierInscrits").addEventListener("change", () => {
     lireFichier(document.getElementById("fichierInscrits"), data => {
 
         inscrits = data.map(x => ({
-            licence: cleanLicence(x.licence),
+            licence: cleanLicence(getCol(x, ["licence", "Licence", "LICENCE"])) || "X",
             nom: x.nom,
             prenom: x.prenom,
             categorie: x.categorie,
@@ -256,7 +257,15 @@ function lireFichier(input, callback) {
     } else {
         const reader = new FileReader();
         reader.onload = e => {
-            const wb = XLSX.read(e.target.result, { type: "binary" });
+            const wb = XLSX.read(e.target.result, {
+                type: "binary",
+                raw: true,
+                codepage: 65001,
+                cellDates: true,
+                cellNF: false,
+                cellText: false
+            });
+
             const ws = wb.Sheets[wb.SheetNames[0]];
 
             const json = XLSX.utils.sheet_to_json(ws);
@@ -268,6 +277,7 @@ function lireFichier(input, callback) {
     }
 }
 </script>
+
 <script>
 /* ============================================================
    🔵 IMPORT MOYENNES (depuis GitHub)
@@ -315,9 +325,6 @@ fetch("https://raw.githubusercontent.com/chiensdor/liste-de-d-part/main/resultat
 ============================================================ */
 function fusionner() {
 
-    /* ------------------------------------------------------------
-       1) Normalisation des données MOYENNES
-       ------------------------------------------------------------ */
     resultats = resultats.map(x => ({
         licence: (x.licence || "").trim().toUpperCase(),
 
@@ -343,10 +350,6 @@ function fusionner() {
         courses: x.courses || ""
     }));
 
-
-    /* ------------------------------------------------------------
-       2) Fusion avec les INSCRITS
-       ------------------------------------------------------------ */
     resultatsGlobaux = inscrits.map(i => {
 
         const prenomInscrit = (i.prenom || "")
@@ -357,9 +360,6 @@ function fusionner() {
             .normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
             .trim().toLowerCase();
 
-        const puceInscrit = (i.puce || "").replace(/\D/g, "");
-
-        // 🔵 Fusion basée sur : licence + prénom + chien
         const r = resultats.find(x =>
             x.licence === i.licence &&
             x.prenom === prenomInscrit &&
@@ -375,11 +375,7 @@ function fusionner() {
         };
     });
 
-
-    /* ------------------------------------------------------------
-       3) Nettoyage final
-       ------------------------------------------------------------ */
-    resultatsGlobaux = resultatsGlobaux.filter(x => x && x.licence);
+    resultatsGlobaux = resultatsGlobaux.filter(x => x !== null && x !== undefined);
 
     filteredView = [...resultatsGlobaux];
 
@@ -423,19 +419,34 @@ function genererParametresParDiscipline() {
                     <option value="30s">Individuel 30s</option>
                 </select>
 
+                <div id="intervalle_${id}" style="margin-top:10px; display:none;">
+                    <label>Intervalle entre départs :</label>
+                    <select id="select_intervalle_${id}">
+                        <option value="15">15 secondes</option>
+                        <option value="30">30 secondes</option>
+                        <option value="60">1 minute</option>
+                    </select>
+                </div>
+
                 <label>Dossard de départ :</label>
                 <input type="number" id="dossard_${id}" value="1" min="1">
             </div>
         `;
 
+        if (!d.includes("canivtt") && !d.includes("canipedicycle")) {
+            document.getElementById("intervalle_" + id).style.display = "block";
+        }
+
         paramDepart[d] = {
             heure: "09:00",
             mode: "1",
-            dossard: 1
+            dossard: 1,
+            intervalle: 30
         };
     });
 }
 </script>
+
 <script>
 /* ============================================================
    🔵 TRI PAR MOYENNE
@@ -445,7 +456,6 @@ function trierParMoyenne(liste) {
         const ma = Number(a.moyenne) || 0;
         const mb = Number(b.moyenne) || 0;
 
-        // Ceux sans moyenne passent en bas
         if (ma === 0 && mb !== 0) return 1;
         if (mb === 0 && ma !== 0) return -1;
 
@@ -478,7 +488,7 @@ function genererVagues(liste, heure, taille) {
 
     return liste.map((item, i) => {
         let g = Math.floor(i / taille);
-        let d = new Date(base.getTime() + g * 60000); // 1 minute par vague
+        let d = new Date(base.getTime() + g * 60000);
         return { ...item, heure_depart: d.toTimeString().split(" ")[0] };
     });
 }
@@ -492,7 +502,7 @@ function genererIndividuel30s(liste, heure) {
     base.setHours(h, m, 0, 0);
 
     return liste.map((item, i) => {
-        let d = new Date(base.getTime() + i * 30000); // 30 secondes
+        let d = new Date(base.getTime() + i * 30000);
         return { ...item, heure_depart: d.toTimeString().split(" ")[0] };
     });
 }
@@ -514,10 +524,15 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
 
         const liste = resultatsGlobaux.filter(r => r.discipline === d);
 
-        // 🔵 Tri par moyenne AVANT génération
         trierParMoyenne(liste);
 
-        // 🔵 Sélection du mode de départ
+        let intervalle = 30;
+
+        if (!d.includes("canivtt") && !d.includes("canipedicycle")) {
+            const sel = document.getElementById("select_intervalle_" + id);
+            if (sel) intervalle = Number(sel.value);
+        }
+
         if (mode === "30s") {
             listesFinales[d] = genererIndividuel30s(liste, heure);
         }
@@ -525,17 +540,15 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
             listesFinales[d] = genererVagues(liste, heure, Number(mode));
         }
         else {
-            listesFinales[d] = genererGroupes(liste, heure, Number(mode), 30);
+            listesFinales[d] = genererGroupes(liste, heure, Number(mode), intervalle);
         }
 
-        // 🔵 Attribution des dossards
         listesFinales[d] = listesFinales[d].map((item, index) => ({
             ...item,
             dossard: dossardDepart + index
         }));
     }
 
-    // Fusion finale pour affichage
     resultatsGlobaux = Object.values(listesFinales).flat();
     filteredView = [...resultatsGlobaux];
 
@@ -544,6 +557,7 @@ document.getElementById("btnGenererListes").addEventListener("click", () => {
     alert("Listes générées !");
 });
 </script>
+
 <script>
 /* ============================================================
    🔵 AFFICHAGE DU TABLEAU
@@ -597,7 +611,6 @@ document.querySelectorAll("#tableResultat th").forEach((th, index) => {
             let va = a[cle] || "";
             let vb = b[cle] || "";
 
-            // Tri numérique si possible
             if (!isNaN(va) && !isNaN(vb)) {
                 va = Number(va);
                 vb = Number(vb);
@@ -610,6 +623,7 @@ document.querySelectorAll("#tableResultat th").forEach((th, index) => {
     });
 });
 </script>
+
 <script>
 /* ============================================================
    🔵 EXPORT CSV
